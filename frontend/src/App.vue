@@ -2,31 +2,37 @@
 import FileInput from './components/FileInput.vue'
 import { verifyBadge } from './utils/verifyBadge'
 import { ref, computed } from 'vue'
-import badgeRegistry from './badgeRegistry.json'
 
-// const publicKey = "033cf979c65b903c05c386ee2b0fc732a2b53fda9759caf94e737d17ed28b63461";
 const publicKeyPem = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAqihA2xS+pIA/DGAqu0lPEPcf8Nv7Zzmhj8freVkLyu0=
 -----END PUBLIC KEY-----`;
 
 const verificationResult = ref<boolean | null>(null);
-const badgeInfo = ref<any>(null);
+const badgeList = ref<Array<{key: string, value: any}>>([]);
 const errorMessage = ref<string>('');
 const showUploadSection = ref<boolean>(true);
 const showSuccessMessage = ref<boolean>(true);
 
 const badgeMedia = computed(() => {
-  if (!badgeInfo.value || !verificationResult.value) {
+  if (!badgeList.value || !verificationResult.value) {
     return null;
   }
-  const badgeTitle = badgeInfo.value.badge_title;
-  const registryEntry = badgeRegistry[badgeTitle as keyof typeof badgeRegistry];
-  if (!registryEntry) {
-    return null;
+  
+  // 从badge数据中直接获取image和video的base64数据
+  let imageData = '';
+  let videoData = '';
+  
+  for (const item of badgeList.value) {
+    if (item.key === 'image') {
+      imageData = item.value;
+    } else if (item.key === 'video') {
+      videoData = item.value;
+    }
   }
+  
   return {
-    image: registryEntry.image ? `/silicon-badge/badge_data/images/${registryEntry.image}` : null,
-    video: registryEntry.video ? `/silicon-badge/badge_data/videos/${registryEntry.video}` : null
+    image: imageData ? `data:image/png;base64,${imageData}` : null,
+    video: videoData ? `data:video/mp4;base64,${videoData}` : null
   };
 });
 
@@ -34,17 +40,48 @@ function toggleUploadSection() {
   showUploadSection.value = !showUploadSection.value;
 }
 
+// 将英文key转换为中文显示
+function getKeyDisplay(key: string): string {
+  const keyMap: Record<string, string> = {
+    'member_name': '持有人',
+    'member_student_id': '学号',
+    'member_role': '角色',
+    'club_name': '社团',
+    'club_id': '社团ID',
+    'badge_title': '标题',
+    'badge_type': '类型',
+    'badge_year': '年份',
+    'badge_description': '描述',
+    'issue_time': '颁发时间',
+    'id': '唯一ID',
+    'name': '姓名',
+    'student_id': '学号',
+    'role': '角色',
+    'clubName': '社团',
+    'clubId': '社团ID',
+    'badgeType': '类型',
+    'badgeYear': '年份',
+    'badgeDescription': '描述',
+    'issueTime': '颁发时间',
+    'image': '徽章图片',
+    'video': '徽章视频'
+  };
+  return keyMap[key] || key;
+}
+
 async function processJsonFile(file: File) {
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    console.log('data', data)
 
+    // 验证签名（badge现在是JSON字符串）
     const isValid = await verifyBadge(data.badge, data.signature, data.algorithm, publicKeyPem);
-    console.log(isValid)
+
+    // 解析badge字符串为数组
+    const badgeArr = JSON.parse(data.badge);
 
     verificationResult.value = isValid;
-    badgeInfo.value = data.badge;
+    badgeList.value = badgeArr;
     errorMessage.value = '';
     showSuccessMessage.value = true;
     
@@ -58,7 +95,7 @@ async function processJsonFile(file: File) {
     console.error('Error processing file:', error);
     errorMessage.value = '文件处理错误，请确保选择的是有效的纪念章文件';
     verificationResult.value = null;
-    badgeInfo.value = null;
+    badgeList.value = [];
   }
 }
 </script>
@@ -103,7 +140,6 @@ async function processJsonFile(file: File) {
             muted 
             playsinline
           />
-          <!-- <div class="video-overlay"></div> -->
         </div>
 
         <!-- 内容容器 - 确保在视频之上 -->
@@ -125,45 +161,29 @@ async function processJsonFile(file: File) {
           
 
           <!-- 纪念章信息展示 -->
-          <div v-if="badgeInfo" :class="['badge-info', { 'invalid': !verificationResult }]">
+          <div v-if="badgeList.length > 0" :class="['badge-info', { 'invalid': !verificationResult }]">
             <div class="badge-layout">
               <!-- 左列：纪念章图片和标题 -->
               <div class="badge-left-column">
-                <div class="badge-image">
+                <div class="badge-image" :class="{ 'has-image': verificationResult && badgeMedia && badgeMedia.image }">
                   <template v-if="verificationResult && badgeMedia && badgeMedia.image">
                     <img :src="badgeMedia.image" alt="徽章图片" class="badge-img" />
                   </template>
                   <span v-else class="badge-emoji">🏅</span>
                 </div>
-                <h2 class="badge-title">{{ badgeInfo.badge_title }}</h2>
-                <p class="badge-type">{{ badgeInfo.badge_type }}</p>
+                <!-- 标题：遍历获取 -->
+                <h2 class="badge-title">{{ badgeList.find(i => i.key === 'badge_title' || i.key === '标题' || i.key === 'badgeTitle')?.value || '纪念章' }}</h2>
+                <!-- <p class="badge-type">{{ badgeList.find(i => i.key === 'badge_type' || i.key === '类型' || i.key === 'badgeType')?.value || '普通纪念章' }}</p> -->
               </div>
               
-              <!-- 右列：详细信息 -->
+              <!-- 右列：详细信息 - 遍历数组，保持顺序 -->
               <div class="badge-right-column">
                 <div class="detail-section">
                   <div class="info-grid">
-                    <span class="label">持有人</span>
-                    <span class="value">{{ badgeInfo.member_name }}</span>
-                    <span class="label">学号</span>
-                    <span class="value">{{ badgeInfo.member_student_id || '未设置' }}</span>
-                    <span class="label">角色</span>
-                    <span class="value">{{ badgeInfo.member_role }}</span>
-                    <span class="label">社团</span>
-                    <span class="value">{{ badgeInfo.club_name }}</span>
-                    <span class="label">社团ID</span>
-                    <span class="value">{{ badgeInfo.club_id }}</span>
-                  </div>
-                
-                  <div class="info-grid">
-                    <span class="label">颁发年份</span>
-                    <span class="value">{{ badgeInfo.badge_year }}</span>
-                    <span class="label">颁发时间</span>
-                    <span class="value">{{ badgeInfo.issue_time }}</span>
-                    <span class="label">描述</span>
-                    <span class="value">{{ badgeInfo.badge_description || '无' }}</span>
-                    <span class="label">唯一ID</span>
-                    <span class="value">{{ badgeInfo.id }}</span>
+                    <template v-for="item in badgeList.filter(i => i.key !== 'image' && i.key !== 'video')" :key="item.key">
+                      <span class="label">{{ getKeyDisplay(item.key) }}</span>
+                      <span class="value">{{ item.value || '未设置' }}</span>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -393,6 +413,16 @@ p {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.badge-image.has-image .badge-img {
+  border-radius: 0;
+}
+
+.badge-image.has-image {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 视频背景区域 */

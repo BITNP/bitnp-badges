@@ -61,42 +61,22 @@ function readAsn1Length(buffer: Buffer, offset: number): { length: number; bytes
   return { length, bytes: 1 + size };
 }
 
-export async function verifyBadge(badgeData: any, signature: string, algorithm: string, publicKeyPem: string): Promise<boolean> {
+/**
+ * 验证纪念章签名
+ * @param badgeStr - badge JSON字符串（直接用于签名验证）
+ * @param signature - Base64编码的签名
+ * @param algorithm - 签名算法
+ * @param publicKeyPem - PEM格式的公钥
+ * @returns 是否验证通过
+ */
+export async function verifyBadge(badgeStr: string, signature: string, algorithm: string, publicKeyPem: string): Promise<boolean> {
   if (algorithm !== 'Ed25519') {
     return false;
   }
 
   try {
-    // 递归排序对象键
-    function sortObject(obj: any): any {
-      if (obj === null || typeof obj !== 'object') return obj;
-      if (Array.isArray(obj)) return obj.map(sortObject);
-      const sorted: any = {};
-      Object.keys(obj).sort().forEach(key => {
-        sorted[key] = sortObject(obj[key]);
-      });
-      return sorted;
-    }
-
-    const normalizedData = sortObject(badgeData);
-    // 与 Python 的 json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=False) 完全一致
-    // 使用自定义序列化函数确保格式一致
-    function serialize(obj: any): string {
-      if (obj === null) return 'null';
-      if (typeof obj === 'boolean') return obj.toString();
-      if (typeof obj === 'number') return obj.toString();
-      if (typeof obj === 'string') return '"' + obj.replace(/"/g, '\\"').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t') + '"';
-      if (Array.isArray(obj)) return '[' + obj.map(serialize).join(',') + ']';
-      if (typeof obj === 'object') {
-        const keys = Object.keys(obj).sort();
-        return '{' + keys.map(key => '"' + key + '":' + serialize(obj[key])).join(',') + '}';
-      }
-      return '';
-    }
-    const jsonStr = serialize(normalizedData);
-    
-    // 实际使用正确的序列化方式
-    const jsonBytes = new TextEncoder().encode(jsonStr);
+    // badgeStr 已经是规范化的JSON字符串，直接使用
+    const jsonBytes = new TextEncoder().encode(badgeStr);
     
     // 解码公钥
     const publicKey = pemToPublicKeyBytes(publicKeyPem);
