@@ -5,7 +5,8 @@
 ## 主要功能
 
 - `generator/generate_keys.py`：生成 Ed25519 密钥对，输出 `private_key.pem` 和 `public_key.pem`，并生成公钥十六进制文件。
-- `generator/generate_badge.py`：读取私钥，生成带签名的纪念章 JSON 文件。
+- `generator/badge_generator.py`：读取私钥，生成带签名的纪念章 JSON 文件。
+- `generator/example.py`：生成示例纪念章 JSON 文件。
 - `generator/verify_badge.py`：使用公钥验证纪念章 JSON 文件中的 Ed25519 签名。
 - `frontend/`：基于 Vue 3 的社团纪念章验证器页面，支持上传 `.json` 纪念章文件进行验证。
 
@@ -28,7 +29,8 @@
 
 - `frontend/`：基于 Vue 3 的前端验证器页面。
 - `generator/generate_keys.py`：生成 Ed25519 密钥对。
-- `generator/generate_badge.py`：生成带签名的纪念章 JSON。
+- `generator/badge_generator.py`：读取私钥，生成带签名的纪念章 JSON 文件。
+- `generator/example.py`：生成示例纪念章 JSON 文件。
 - `generator/verify_badge.py`：验证纪念章签名。
 - `generator/pyproject.toml`：Python 项目依赖声明。
 - `generator/keys/`：生成后的密钥文件目录。
@@ -80,7 +82,7 @@ uv run python generate_keys.py
 
 ```bash
 cd generator
-uv run python generate_badge.py
+uv run python example.py
 ```
 
 脚本会提示输入：
@@ -124,7 +126,7 @@ pnpm dev
 
 ## 注意事项
 
-- `generate_badge.py` 和 `verify_badge.py` 使用相同的 JSON 规范化方式（`sort_keys=True` 以及最小分隔符），保证签名和验证计算一致。
+- `badge_generator.py` 和 `verify_badge.py` 使用相同的 JSON 规范化方式（`sort_keys=True` 以及最小分隔符），保证签名和验证计算一致。
 - 生成的纪念章文件中包含 `badge`、`signature` 和 `algorithm` 字段。
 - `test_keys/public_key_hex.txt` 为示例公钥文件，可用于测试和参考。
 

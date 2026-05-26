@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
 生成带有签名的纪念章JSON文件
-运行: python generate_badge.py
+使用方式:
+from badge_generator import BadgeGenerator
+generator = BadgeGenerator()
+badge_data = generator.generate_badge({"姓名": "张三", "学号": "123456", "角色": "成员"})
 """
 
 import json
-import hashlib
 import base64
-import uuid
 import os
 from datetime import datetime
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature
 
 class BadgeGenerator:
     def __init__(self, private_key_path="keys/private_key.pem"):
@@ -25,43 +24,57 @@ class BadgeGenerator:
                 backend=default_backend()
             )
     
-    def sign_data(self, data: dict) -> str:
-        """为数据生成Ed25519签名"""
-        
-        # 将数据转为规范化JSON字符串（确保空格、排序一致）
-        json_str = json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-        
+    # 支持的媒体格式映射
+    MEDIA_TYPES = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.ogg': 'video/ogg',
+    }
+
+    def encode_file_to_base64(self, file_path: str) -> str:
+        """将文件编码为Base64字符串，包含data URL头"""
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_type = self.MEDIA_TYPES.get(ext, 'application/octet-stream')
+        with open(file_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode('utf-8')
+        return f"data:{mime_type};base64,{encoded}"
+    
+    def sign_data(self, json_str: str) -> str:
+        """为JSON字符串生成Ed25519签名"""
         # 使用私钥签名（Ed25519会自动处理哈希）
         signature = self.private_key.sign(json_str.encode('utf-8'))
         
         # 将签名转为Base64字符串
         return base64.b64encode(signature).decode('utf-8')
     
-    def generate_badge(self, member_info: dict) -> dict:
-        """生成完整的纪念章数据"""
+    def generate_badge(self, data: dict) -> dict:
+        """
+        生成完整的纪念章数据
         
-        # 基本徽章信息
-        badge_data = {
-            "version": "1.0",
-            "id": str(uuid.uuid4()),  # 唯一ID
-            "issue_time": datetime.utcnow().isoformat() + "Z",
-            "club_name": member_info.get("club_name", "未命名社团"),
-            "club_id": member_info.get("club_id", "CLUB_001"),
-            "member_name": member_info["name"],
-            "member_student_id": member_info.get("student_id", ""),
-            "member_role": member_info.get("role", "成员"),
-            "badge_type": member_info.get("badge_type", "普通纪念章"),
-            "badge_title": member_info.get("badge_title", "社团纪念章"),
-            "badge_description": member_info.get("description", ""),
-            "badge_year": datetime.now().year
-        }
+        Args:
+            data: 任意dict，包含纪念章的所有属性
+            
+        Returns:
+            扁平格式的纪念章数据，包含badge(JSON string)、signature、algorithm
+            badge 格式: [{"key": "xxx", "value": "xxx"}, ...]
+        """
+        # 将 dict 转为数组格式，保持插入顺序
+        badge_list = [{"key": k, "value": v} for k, v in data.items()]
+        
+        # 将数据转为规范化JSON字符串（确保空格一致）
+        badge_str = json.dumps(badge_list, separators=(',', ':'), ensure_ascii=False)
         
         # 生成签名
-        signature = self.sign_data(badge_data)
+        signature = self.sign_data(badge_str)
         
-        # 返回完整数据
+        # 返回扁平格式的数据
         return {
-            "badge": badge_data,
+            "badge": badge_str,
             "signature": signature,
             "algorithm": "Ed25519"
         }
@@ -69,11 +82,27 @@ class BadgeGenerator:
     def save_badge(self, badge_data: dict, filename: str = None):
         """保存纪念章到文件"""
         if not filename:
-            # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            member_name = badge_data["badge"]["member_name"]
-            student_id = badge_data["badge"]["member_student_id"]
-            title = badge_data["badge"]["badge_title"]
-            filename = f"badges/{student_id}_{member_name}_{title}.json"
+            # 尝试从badge数组中提取信息生成文件名
+            try:
+                badge_list = json.loads(badge_data["badge"])
+                member_name = None
+                student_id = None
+                title = "badge"
+                for item in badge_list:
+                    if item["key"] in ("姓名", "member_name", "name"):
+                        member_name = item["value"]
+                    elif item["key"] in ("学号", "student_id", "member_student_id"):
+                        student_id = item["value"]
+                    elif item["key"] in ("标题", "badge_title"):
+                        title = item["value"]
+                if not member_name:
+                    member_name = "unknown"
+                if not student_id:
+                    student_id = ""
+                filename = f"badges/{student_id}_{member_name}_{title}.json"
+            except:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"badges/badge_{timestamp}.json"
         
         os.makedirs("badges", exist_ok=True)
         
@@ -82,51 +111,3 @@ class BadgeGenerator:
         
         print(f"✅ 纪念章已生成: {filename}")
         return filename
-
-def get_member_info():
-    """从用户输入获取成员信息"""
-    print("\n🎖️  纪念章生成向导")
-    print("-" * 30)
-    
-    info = {}
-    info["name"] = input("成员姓名: ").strip()
-    info["student_id"] = input("学号(可选): ").strip()
-    info["role"] = input("在社团中的角色: ").strip() or "成员"
-    info["club_name"] = input("社团名称: ").strip() or "元空间社团"
-    info["club_id"] = input("社团代号(如: METASPACE): ").strip() or "METASPACE"
-    info["badge_type"] = input("纪念章类型(如: 元老/杰出/活跃): ").strip() or "纪念章"
-    info["badge_title"] = input("纪念章标题: ").strip() or "社团贡献纪念"
-    info["description"] = input("描述(可选): ").strip()
-    
-    return info
-
-if __name__ == "__main__":
-    import os
-    
-    # 检查私钥是否存在
-    if not os.path.exists("keys/private_key.pem"):
-        print("❌ 未找到私钥文件，请先运行 generate_keys.py")
-        exit(1)
-    
-    # 创建生成器
-    try:
-        generator = BadgeGenerator()
-    except Exception as e:
-        print(f"❌ 加载私钥失败: {e}")
-        exit(1)
-    
-    # 获取成员信息
-    member_info = get_member_info()
-    
-    # 生成纪念章
-    badge = generator.generate_badge(member_info)
-    
-    # 保存文件
-    print(badge)
-    filename = generator.save_badge(badge)
-    
-    print(f"\n🎉 纪念章生成完成！")
-    print(f"📁 文件位置: {filename}")
-    print(f"🔐 签名算法: {badge['algorithm']}")
-    print(f"🆔 唯一标识: {badge['badge']['id']}")
-    print(f"\n💡 提示: 你可以将此文件发送给成员，并附上 verify_badge.html 进行验证")

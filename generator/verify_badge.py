@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
 """
 验证纪念章签名
-运行: python verify_badge.py badge.json
+使用方式:
+from verify_badge import verify_badge
+is_valid, badge_list = verify_badge("badge.json")
 """
 
 import json
 import base64
-import hashlib
-import sys
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature
 
 def verify_badge(badge_file: str, public_key_path: str = "keys/public_key.pem"):
-    """验证纪念章签名"""
+    """
+    验证纪念章签名
+    
+    Args:
+        badge_file: 纪念章JSON文件路径
+        public_key_path: 公钥文件路径
+        
+    Returns:
+        (is_valid, badge_list): (是否验证通过, 徽章信息数组 [{"key": "xxx", "value": "xxx"}, ...])
+    """
     
     # 加载纪念章数据
     with open(badge_file, "r", encoding="utf-8") as f:
         badge_data = json.load(f)
     
-    # 分离数据和签名
-    badge_info = badge_data["badge"]
+    # 分离数据和签名（badge现在是JSON字符串）
+    badge_str = badge_data["badge"]
     signature_b64 = badge_data["signature"]
+    
+    # 解析badge字符串为数组格式
+    badge_list = json.loads(badge_str)
     
     # 加载公钥
     with open(public_key_path, "rb") as f:
@@ -31,44 +42,52 @@ def verify_badge(badge_file: str, public_key_path: str = "keys/public_key.pem"):
             backend=default_backend()
         )
         
-    
-    # 规范化JSON字符串（必须与签名时完全一致）
-    json_str = json.dumps(badge_info, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-    
     # 解码签名
     signature_bytes = base64.b64decode(signature_b64)
     
     # 验证签名（Ed25519会自动处理哈希）
+    # 直接使用badge字符串进行验证，不需要再次序列化
     try:
         public_key.verify(
             signature_bytes,
-            json_str.encode('utf-8')
+            badge_str.encode('utf-8')
         )
-        return True, badge_info
+        return True, badge_list
     except InvalidSignature:
-        return False, badge_info
-    except Exception as e:
-        return False, badge_info
+        return False, badge_list
+    except Exception:
+        return False, badge_list
 
-def display_badge_info(badge_info: dict):
-    """美观地显示纪念章信息"""
+def display_badge_info(badge_list: list):
+    """美观地显示纪念章信息（遍历数组，保持顺序）"""
     print("\n" + "="*50)
-    print("🏅 纪念章验证结果")
+    print("🏅 纪念章信息")
     print("="*50)
-    print(f"持有人: {badge_info['member_name']}")
-    print(f"学号: {badge_info['member_student_id'] or '未设置'}")
-    print(f"角色: {badge_info['member_role']}")
-    print(f"社团: {badge_info['club_name']}")
-    print(f"纪念章: {badge_info['badge_title']}")
-    print(f"类型: {badge_info['badge_type']}")
-    print(f"年份: {badge_info['badge_year']}")
-    if badge_info['badge_description']:
-        print(f"描述: {badge_info['badge_description']}")
-    print(f"颁发时间: {badge_info['issue_time']}")
-    print(f"唯一ID: {badge_info['id']}")
+    for item in badge_list:
+        key = item["key"]
+        value = item["value"]
+        # 将可能的英文key转换为中文显示
+        key_display = {
+            'member_name': '持有人',
+            'member_student_id': '学号',
+            'member_role': '角色',
+            'club_name': '社团',
+            'club_id': '社团ID',
+            'badge_title': '标题',
+            'badge_type': '类型',
+            'badge_year': '年份',
+            'badge_description': '描述',
+            'issue_time': '颁发时间',
+            'id': '唯一ID'
+        }.get(key, key)
+        # 处理空值或None
+        value_display = value if value else '未设置'
+        print(f"{key_display}: {value_display}")
     print("="*50)
 
 if __name__ == "__main__":
+    import sys
+    
     if len(sys.argv) < 2:
         print("使用方法: python verify_badge.py <badge_file.json> [public_key.pem]")
         sys.exit(1)
@@ -77,14 +96,13 @@ if __name__ == "__main__":
     public_key = sys.argv[2] if len(sys.argv) > 2 else "keys/public_key.pem"
     
     try:
-        is_valid, badge_info = verify_badge(badge_file, public_key)
+        is_valid, badge_list = verify_badge(badge_file, public_key)
         
         if is_valid:
             print("✅ 验证通过！此纪念章真实有效。")
-            display_badge_info(badge_info)
         else:
             print("❌ 验证失败！纪念章可能被篡改或签名无效。")
-            display_badge_info(badge_info)
+        display_badge_info(badge_list)
             
     except FileNotFoundError as e:
         print(f"❌ 文件未找到: {e}")

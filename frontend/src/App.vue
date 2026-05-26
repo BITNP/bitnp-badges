@@ -31,8 +31,8 @@ const badgeMedia = computed(() => {
   }
   
   return {
-    image: imageData ? `data:image/png;base64,${imageData}` : null,
-    video: videoData ? `data:video/mp4;base64,${videoData}` : null
+    image: imageData || null,
+    video: videoData || null
   };
 });
 
