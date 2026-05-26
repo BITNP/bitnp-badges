@@ -12,6 +12,7 @@ const badgeList = ref<Array<{key: string, value: any}>>([]);
 const errorMessage = ref<string>('');
 const showUploadSection = ref<boolean>(true);
 const showSuccessMessage = ref<boolean>(true);
+const showAboutModal = ref<boolean>(false);
 
 const badgeMedia = computed(() => {
   if (!badgeList.value || !verificationResult.value) {
@@ -38,6 +39,10 @@ const badgeMedia = computed(() => {
 
 function toggleUploadSection() {
   showUploadSection.value = !showUploadSection.value;
+}
+
+function toggleAboutModal() {
+  showAboutModal.value = !showAboutModal.value;
 }
 
 // 将英文key转换为中文显示
@@ -102,6 +107,29 @@ async function processJsonFile(file: File) {
 
 <template>
   <div class="app-container">
+    <!-- 顶部操作按钮组 -->
+    <div class="top-buttons">
+      <!-- GitHub链接按钮 -->
+      <a href="https://github.com/SiliconSiliconGrass/silicon-badge" 
+         target="_blank" 
+         rel="noopener noreferrer"
+         class="github-button"
+         title="查看项目源码">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.7-2.782.605-3.369-1.343-3.369-1.343-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.268 2.75 1.026A9.578 9.578 0 0112 6.844c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.026 2.747-1.026.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.138 20.161 22 16.44 22 12.017 22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>
+        </svg>
+      </a>
+      
+      <!-- 关于按钮 -->
+      <button @click="toggleAboutModal" class="about-button" title="关于项目">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </button>
+    </div>
+
     <!-- 展开按钮 - 验证通过后显示 -->
     <button v-if="verificationResult === true && !showUploadSection" 
             @click="toggleUploadSection" 
@@ -123,6 +151,52 @@ async function processJsonFile(file: File) {
         <!-- 错误信息显示 -->
         <div v-if="errorMessage" class="error-message">
           {{ errorMessage }}
+        </div>
+      </div>
+    </transition>
+
+    <!-- 关于项目模态框 -->
+    <transition name="modal">
+      <div v-if="showAboutModal" class="modal-overlay" @click="toggleAboutModal">
+        <div class="modal-content" @click.stop>
+          <button class="modal-close" @click="toggleAboutModal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          
+          <h2>关于本项目</h2>
+          
+          <div class="about-content">
+            <section>
+              <h3>🔐 防伪技术</h3>
+              <p>本项目使用<strong>数字签名</strong>技术对纪念章数据进行防伪验证。</p>
+              <ul>
+                <li>私钥由服务器端保密，确保只有授权机构才能颁发纪念章</li>
+                <li>公钥随前端公开，任何人都可以验证纪念章的真实性</li>
+                <li>任何对纪念章数据的篡改都会导致验证失败</li>
+              </ul>
+            </section>
+            
+            <section>
+              <h3>📦 数据结构</h3>
+              <p>纪念章文件采用 JSON 格式存储，包含三个核心部分：</p>
+              <ul>
+                <li><code>badge</code> - 纪念章数据（JSON 字符串形式）</li>
+                <li><code>signature</code> - 数字签名</li>
+                <li><code>algorithm</code> - 签名算法标识</li>
+              </ul>
+            </section>
+            
+            <section>
+              <h3>🛡️ 安全特性</h3>
+              <ul>
+                <li>前端纯本地验证，数据不上传服务器</li>
+                <li>支持图片和视频的 Base64 内嵌存储</li>
+              </ul>
+            </section>
+          </div>
         </div>
       </div>
     </transition>
@@ -206,6 +280,58 @@ async function processJsonFile(file: File) {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   position: relative;
   overflow: visible;
+}
+
+/* 顶部按钮组 */
+.top-buttons {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  gap: 10px;
+  z-index: 1000;
+}
+
+/* GitHub按钮 */
+.github-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: #1f2937;
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.github-button:hover {
+  background: #374151;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* 关于按钮 */
+.about-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  transition: all 0.3s ease;
+}
+
+.about-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
 }
 
 /* 展开按钮样式 */
@@ -543,6 +669,132 @@ p {
 .badge-info.invalid .badge-image {
   background: linear-gradient(135deg, #94a3b8, #cbd5e1);
   box-shadow: none;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 8px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.modal-content h2 {
+  margin: 0;
+  padding: 24px 60px 16px 24px;
+  font-size: 1.5rem;
+  color: #111827;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.about-content {
+  padding: 24px;
+}
+
+.about-content section {
+  margin-bottom: 24px;
+}
+
+.about-content section:last-child {
+  margin-bottom: 0;
+}
+
+.about-content h3 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.about-content p {
+  margin: 0 0 12px;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.about-content ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.about-content li {
+  color: #4b5563;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.about-content li:last-child {
+  margin-bottom: 0;
+}
+
+.about-content code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+  color: #ef4444;
+}
+
+/* 模态框动画 */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-active .modal-content,
+.modal-leave-active .modal-content {
+  transition: transform 0.3s ease;
+}
+
+.modal-enter-from .modal-content,
+.modal-leave-to .modal-content {
+  transform: scale(0.95) translateY(-20px);
 }
 
 /* 响应式设计 */
