@@ -8,10 +8,25 @@ const uploadError = ref('')
 const selectedFileName = ref('')
 const isDragActive = ref(false)
 
+const JSON_EXTENSIONS = ['.json']
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']
+
+function isJsonFile(file: File): boolean {
+  const name = file.name.toLowerCase()
+  return JSON_EXTENSIONS.some((ext) => name.endsWith(ext))
+}
+
+function isImageFile(file: File): boolean {
+  const name = file.name.toLowerCase()
+  return file.type.startsWith('image/') || IMAGE_EXTENSIONS.some((ext) => name.endsWith(ext))
+}
+
 function handleFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input?.files?.[0]
   handleSelectedFile(file)
+  // 清空 input，保证连续选择同一个文件时也能触发 change
+  input.value = ''
 }
 
 function handleDrop(event: DragEvent) {
@@ -35,12 +50,12 @@ function handleSelectedFile(file: File | undefined) {
   selectedFileName.value = ''
 
   if (!file) {
-    uploadError.value = '请选择一个 JSON 文件。'
+    uploadError.value = '请选择一个 JSON 文件或一张包含二维码的图片。'
     return
   }
 
-  if (!file.name.toLowerCase().endsWith('.json')) {
-    uploadError.value = '只支持 .json 文件。'
+  if (!isJsonFile(file) && !isImageFile(file)) {
+    uploadError.value = '只支持 .json 文件或图片（PNG / JPG 等）。'
     return
   }
 
@@ -58,13 +73,14 @@ function handleSelectedFile(file: File | undefined) {
     @drop="handleDrop"
   >
     <div class="dropzone">
-      <p>将 .json 纪念章文件拖拽到此处，或点击按钮选择文件。</p>
+      <p>将 .json 纪念章文件或包含二维码的图片（PNG）拖拽到此处，或点击按钮选择文件。</p>
+      <p class="dropzone-hint">选择图片时，会识别图片中的二维码，并读取其中的 JSON 作为纪念章数据。</p>
       <label class="upload-label" for="json-upload">选择纪念章文件</label>
       <input
         id="json-upload"
         ref="fileInput"
         type="file"
-        accept="application/json,.json"
+        accept="application/json,.json,image/png,image/jpeg,image/webp,image/gif,image/bmp,.png,.jpg,.jpeg,.webp,.gif,.bmp"
         @change="handleFileChange"
       />
     </div>
@@ -105,6 +121,11 @@ function handleSelectedFile(file: File | undefined) {
 .dropzone p {
   margin: 0;
   color: #64748b;
+}
+
+.dropzone .dropzone-hint {
+  font-size: 0.85rem;
+  color: #94a3b8;
 }
 
 .upload-label {

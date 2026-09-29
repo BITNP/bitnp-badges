@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import FileInput from './components/FileInput.vue'
 import { verifyBadge } from './utils/verifyBadge'
+import { decodeQrFromImage } from './utils/decodeQr'
 import { ref, computed } from 'vue'
 
 const publicKeyPem = `-----BEGIN PUBLIC KEY-----
@@ -13,6 +14,9 @@ const errorMessage = ref<string>('');
 const showUploadSection = ref<boolean>(true);
 const showSuccessMessage = ref<boolean>(true);
 const showAboutModal = ref<boolean>(false);
+const isProcessing = ref<boolean>(false);
+
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'];
 
 const badgeMedia = computed(() => {
   if (!badgeList.value || !verificationResult.value) {
@@ -74,33 +78,112 @@ function getKeyDisplay(key: string): string {
   return keyMap[key] || key;
 }
 
-async function processJsonFile(file: File) {
+function isImageFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return file.type.startsWith('image/') || IMAGE_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+// badge 数据：badge 为 JSON 字符串，signature 为 Base64 签名
+interface BadgeData {
+  badge: string;
+  signature: string;
+  algorithm: string;
+}
+
+/**
+ * 从解析后的对象中取出 badge / signature / algorithm
+ * JSON 文件和二维码中都应该存放同样的结构
+ */
+function extractBadgeData(parsed: unknown, sourceLabel: string): BadgeData {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const candidate = parsed as Record<string, unknown>;
+    const { badge, signature, algorithm } = candidate;
+
+    if (typeof badge === 'string' && typeof signature === 'string') {
+      return {
+        badge,
+        signature,
+        algorithm: typeof algorithm === 'string' && algorithm ? algorithm : 'Ed25519',
+      };
+    }
+  }
+
+  throw new Error(`${sourceLabel}中缺少有效的 badge 或 signature 字段。`);
+}
+
+/**
+ * 校验纪念章数据并更新页面状态
+ */
+async function verifyAndDisplay(data: BadgeData) {
+  // 验证签名（badge 是 JSON 字符串）
+  const isValid = await verifyBadge(data.badge, data.signature, data.algorithm, publicKeyPem);
+
+  // 解析 badge 字符串为数组
+  let badgeArr: Array<{ key: string; value: any }>;
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    badgeArr = JSON.parse(data.badge);
+  } catch {
+    throw new Error('纪念章数据中的 badge 字段不是有效的 JSON 字符串。');
+  }
 
-    // 验证签名（badge现在是JSON字符串）
-    const isValid = await verifyBadge(data.badge, data.signature, data.algorithm, publicKeyPem);
+  verificationResult.value = isValid;
+  badgeList.value = badgeArr;
+  errorMessage.value = '';
+  showSuccessMessage.value = true;
 
-    // 解析badge字符串为数组
-    const badgeArr = JSON.parse(data.badge);
+  if (isValid) {
+    showUploadSection.value = false;
+    setTimeout(() => {
+      showSuccessMessage.value = false;
+    }, 2000);
+  }
+}
 
-    verificationResult.value = isValid;
-    badgeList.value = badgeArr;
-    errorMessage.value = '';
-    showSuccessMessage.value = true;
-    
-    if (isValid) {
-      showUploadSection.value = false;
-      setTimeout(() => {
-        showSuccessMessage.value = false;
-      }, 2000);
+/**
+ * 解析一段 JSON 文本，并校验其中的纪念章数据
+ */
+async function processBadgeJsonText(text: string, sourceLabel: string) {
+  let parsed = parseJsonText(text, sourceLabel);
+
+  // 兼容被转义了两次的 JSON 字符串（整体是一个 JSON 字符串）
+  if (typeof parsed === 'string') {
+    parsed = parseJsonText(parsed, sourceLabel);
+  }
+
+  await verifyAndDisplay(extractBadgeData(parsed, sourceLabel));
+}
+
+function parseJsonText(text: string, sourceLabel: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${sourceLabel}不是有效的 JSON。`);
+  }
+}
+
+/**
+ * 处理上传的文件：JSON 文件直接解析，图片文件先识别其中的二维码
+ */
+async function handleSelectedFile(file: File) {
+  isProcessing.value = true;
+
+  try {
+    if (isImageFile(file)) {
+      // 二维码中预期是一段 JSON 字符串
+      const qrText = await decodeQrFromImage(file);
+      await processBadgeJsonText(qrText, '二维码内容');
+    } else {
+      await processBadgeJsonText(await file.text(), '纪念章文件');
     }
   } catch (error) {
     console.error('Error processing file:', error);
-    errorMessage.value = '文件处理错误，请确保选择的是有效的纪念章文件';
+    errorMessage.value = error instanceof Error && error.message
+      ? error.message
+      : '文件处理错误，请确保选择的是有效的纪念章文件';
     verificationResult.value = null;
     badgeList.value = [];
+  } finally {
+    isProcessing.value = false;
   }
 }
 </script>
@@ -143,10 +226,15 @@ async function processJsonFile(file: File) {
       <div v-show="showUploadSection" class="upload-section">
         <header>
           <h1>验收你的网协纪念章！</h1>
-          <p>请选择一个 .json 文件来验证你的纪念章</p>
+          <p>请选择一个 .json 文件，或包含二维码的图片（PNG）来验证你的纪念章</p>
         </header>
 
-        <FileInput @file-selected="processJsonFile" />
+        <FileInput @file-selected="handleSelectedFile" />
+
+        <!-- 处理中提示（图片需要先识别二维码） -->
+        <div v-if="isProcessing" class="processing-message">
+          正在处理，请稍候…
+        </div>
 
         <!-- 错误信息显示 -->
         <div v-if="errorMessage" class="error-message">
@@ -187,6 +275,7 @@ async function processJsonFile(file: File) {
                 <li><code>signature</code> - 数字签名</li>
                 <li><code>algorithm</code> - 签名算法标识</li>
               </ul>
+              <p>也可以上传包含二维码的图片：二维码中存放同样的 JSON 字符串，页面会自动识别二维码并读取其中的纪念章数据。</p>
             </section>
             
             <section>
@@ -446,6 +535,15 @@ p {
   margin: 0.5rem 0 0;
   color: #475569;
   font-size: 1.1rem;
+}
+
+.processing-message {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  text-align: center;
 }
 
 .verification-result {
