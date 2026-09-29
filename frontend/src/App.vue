@@ -193,7 +193,7 @@ async function handleSelectedFile(file: File) {
     <!-- 顶部操作按钮组 -->
     <div class="top-buttons">
       <!-- GitHub链接按钮 -->
-      <a href="https://github.com/SiliconSiliconGrass/silicon-badge" 
+      <a href="https://github.com/BITNP/bitnp-badges" 
          target="_blank" 
          rel="noopener noreferrer"
          class="github-button"
